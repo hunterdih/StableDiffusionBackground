@@ -1,5 +1,6 @@
 import torch
-from diffusers import LCMScheduler, AutoPipelineForText2Image, LDMSuperResolutionPipeline, DiffusionPipeline
+#from diffusers import LCMScheduler, AutoPipelineForText2Image, LDMSuperResolutionPipeline, DiffusionPipeline
+import diffusers
 import requests
 from PIL import Image
 from io import BytesIO
@@ -7,7 +8,9 @@ import torch
 from pathlib import Path
 import os
 import numpy as np
+from removeSeam import *
 
+#######PARAMS#######
 increase_res = True
 
 desired_width = 2560
@@ -16,7 +19,16 @@ desired_height = 1440
 width = 640
 height = 360
 
-prompt = "kanto starting pokemon, ray tracing, 8k"
+overlap = 30
+blend_width = 120
+
+###################
+
+desired_width_before_merge = desired_width +blend_width
+desired_height_before_merge = desired_height + blend_width
+
+
+prompt = "person smiling at the camera"
 output_dir = r'outputs/' + prompt
 save_images = True
 
@@ -34,8 +46,8 @@ model_id_sr = "CompVis/ldm-super-resolution-4x-openimages"
 
 adapter_id = "latent-consistency/lcm-lora-sdv1-5"
 
-pipe_sd = DiffusionPipeline.from_pretrained(model_id_sd, torch_dtype=torch.float16, variant="fp16", cache_dir=r'D:\MLModelComponents', safety_checker=None)
-pipe_sd.scheduler = LCMScheduler.from_config(pipe_sd.scheduler.config)
+pipe_sd = diffusers.DiffusionPipeline.from_pretrained(model_id_sd, torch_dtype=torch.float16, variant="fp16", cache_dir='Model',safety_checker=None)
+pipe_sd.scheduler = diffusers.LCMScheduler.from_config(pipe_sd.scheduler.config)
 pipe_sd.to(device)
 
 # load and fuse lcm lora
@@ -61,13 +73,18 @@ while True:
 width, height = image.size
 
 # Setting the points for cropped image
-top_left = (0, 0, (width // 2)+6, (height // 2)+6)
+top_left = (0, 0, (width // 2)+overlap//2, (height // 2)+overlap//2)
 
-top_right = ((width // 2)-6, 0, width, (height // 2)+6)
+top_right = ((width // 2)-overlap//2, 0, width, (height // 2)+overlap//2)
 
-bottom_left = (0, (height // 2)-6, (width // 2)+6, height)
+bottom_left = (0, (height // 2)-overlap//2, (width // 2)+overlap//2, height)
 
-bottom_right = ((width // 2)-6, (height // 2)-6, width, height)
+bottom_right = ((width // 2)-overlap//2, (height // 2)-overlap//2, width, height)
+
+print(top_left)
+print(top_right)
+print(bottom_left)
+print(bottom_right)
 
 # Cropped image of above dimension
 # (It will not change cat_with_hat image)
@@ -80,17 +97,25 @@ im_tl.save(output_dir + r'/parts/im_tl.png')
 im_tr.save(output_dir + r'/parts/im_tr.png')
 im_bl.save(output_dir + r'/parts/im_bl.png')
 im_br.save(output_dir + r'/parts/im_br.png')
+"""im_tl = im_tl.resize((desired_width_before_merge // 2, desired_height_before_merge // 2))
+im_tr = im_tr.resize((desired_width_before_merge // 2, desired_height_before_merge // 2))
+im_bl = im_bl.resize((desired_width_before_merge // 2, desired_height_before_merge // 2))
+im_br = im_tl.resize((desired_width_before_merge // 2, desired_height_before_merge // 2))"""
+
 
 if increase_res:
-    pipe_sr = LDMSuperResolutionPipeline.from_pretrained(model_id_sr, variant="fp16", cache_dir=r'D:\MLModelComponents', safety_checker=None)
+    pipe_sr = diffusers.LDMSuperResolutionPipeline.from_pretrained(model_id_sr, variant="fp16", cache_dir='Model', safety_checker=None)
     pipe_sr = pipe_sr.to(device)
 
     # run pipe_sr in inference (sample random noise and denoise)
-
-    upscaled_im_tl = pipe_sr(im_tl, num_inference_steps=10, eta=1).images[0]
-    upscaled_im_tr = pipe_sr(im_tr, num_inference_steps=10, eta=1).images[0]
-    upscaled_im_bl = pipe_sr(im_bl, num_inference_steps=10, eta=1).images[0]
-    upscaled_im_br = pipe_sr(im_br, num_inference_steps=10, eta=1).images[0]
+    print("upscaling top left quadrant...")
+    upscaled_im_tl = pipe_sr(im_tl, num_inference_steps=20, eta=1).images[0]
+    print("upscaling top right quadrant...")
+    upscaled_im_tr = pipe_sr(im_tr, num_inference_steps=20, eta=1).images[0]
+    print("upscaling bottom left quadrant...")
+    upscaled_im_bl = pipe_sr(im_bl, num_inference_steps=20, eta=1).images[0]
+    print("upscaling bottom right quadrant...")
+    upscaled_im_br = pipe_sr(im_br, num_inference_steps=20, eta=1).images[0]
 
 
     upscaled_im_tl.save(output_dir + r'/parts_super_resolution/im_tl.png')
@@ -98,31 +123,30 @@ if increase_res:
     upscaled_im_bl.save(output_dir + r'/parts_super_resolution/im_bl.png')
     upscaled_im_br.save(output_dir + r'/parts_super_resolution/im_br.png')
 
-    upscaled_im_tl = upscaled_im_tl.resize((desired_width // 2, desired_height // 2))
-    upscaled_im_tr = upscaled_im_tr.resize((desired_width // 2, desired_height // 2))
-    upscaled_im_bl = upscaled_im_bl.resize((desired_width // 2, desired_height // 2))
-    upscaled_im_br = upscaled_im_br.resize((desired_width // 2, desired_height // 2))
+    upscaled_im_tl = upscaled_im_tl.resize((desired_width_before_merge // 2, desired_height_before_merge // 2))
+    upscaled_im_tr = upscaled_im_tr.resize((desired_width_before_merge // 2, desired_height_before_merge // 2))
+    upscaled_im_bl = upscaled_im_bl.resize((desired_width_before_merge // 2, desired_height_before_merge // 2))
+    upscaled_im_br = upscaled_im_br.resize((desired_width_before_merge // 2, desired_height_before_merge // 2))
 
-
-
-    upscaled_image = Image.new('RGB', (2560, 1440), 'white')
+    ###########Seam not removed################
+    upscaled_image = Image.new('RGB', (desired_width_before_merge, desired_height_before_merge), 'white')
 
     upscaled_image.paste(upscaled_im_tl, (0, 0))
-    upscaled_image.paste(upscaled_im_tr, (desired_width//2, 0))
-    upscaled_image.paste(upscaled_im_bl, (0, desired_height//2))
-    upscaled_image.paste(upscaled_im_br, (desired_width // 2, desired_height // 2))
+    upscaled_image.paste(upscaled_im_tr, (desired_width_before_merge//2, 0))
+    upscaled_image.paste(upscaled_im_bl, (0, desired_height_before_merge//2))
+    upscaled_image.paste(upscaled_im_br, (desired_width_before_merge // 2, desired_height_before_merge // 2))
 
-    upscaled_image = upscaled_image.resize((desired_width, desired_height))
+    upscaled_image = upscaled_image.resize((desired_width_before_merge, desired_height_before_merge))
 
     upscaled_image_npy = np.array(upscaled_image)
 
-
-
     if save_images:
         upscaled_image.save(output_dir + r'/super_resolution/super_resolution.png')
-
-
-
-
-
         image.save(output_dir + '/original/original_image.png')
+    
+    #######################
+
+print("Blending images to remove the seam...")
+blend_images(output_dir + r'/parts_super_resolution/im_tl.png', output_dir + r'/parts_super_resolution/im_tr.png', output_dir + r'/parts_super_resolution/top.png', resize_width=desired_width_before_merge, resize_height=desired_height_before_merge, blend_width=blend_width, direction='horizontal')
+blend_images(output_dir + r'/parts_super_resolution/im_bl.png', output_dir + r'/parts_super_resolution/im_br.png', output_dir + r'/parts_super_resolution/bottom.png', resize_width=desired_width_before_merge, resize_height=desired_height_before_merge, blend_width=blend_width, direction='horizontal')
+blend_images(output_dir + r'/parts_super_resolution/top.png', output_dir + r'/parts_super_resolution/bottom.png', output_dir + r'/super_resolution/seam_removed.png', blend_width=blend_width, direction='vertical')
