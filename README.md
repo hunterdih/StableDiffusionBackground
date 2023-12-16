@@ -1,5 +1,5 @@
 To use the StableDiffusionBackground generator, first clone the respository and create an anaconda environment.
-- Notable required packages include the huggingface diffusers package, numpy, and pytorch with CUDA.
-- To create an image, set the prompt variable equal to your image prompt.
-- Run the program to generate the image is generated, a low resolution image will be first shown to confirm whether or not you wish to increase the image resolution.
-- All files will and sub-files associated with increasing the image resolution will be saved to outputs/prompt...
+- To generate an image, you'll need to install several essential packages: the Huggingface Diffusers package, NumPy, and PyTorch with CUDA support.
+- First, assign your desired image description to the variable named 'prompt'.
+- When you execute the program, it initially produces a low-resolution preview of the image. You can then decide if you want to enhance the resolution.
+- Should you choose to increase the image resolution, all relevant files and sub-files will be saved in a folder named 'outputs' followed by the specific prompt you used.
